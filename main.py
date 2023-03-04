@@ -1,4 +1,5 @@
-import sqlite3
+import mysql.connector
+# from mysql.connector import errorcode
 import telebot
 from telebot import types
 bot = telebot.TeleBot('6116709046:AAGyX2UF_4fgLIVUQndbfrW4Ca2af-Xus7U')  # Токен для управления бота
@@ -16,15 +17,17 @@ user_data = {}
 # Подключение к БД
 
 
-conn = sqlite3.connect('C:\\SqlLite\\Database', check_same_thread=False)
-cursor = conn.cursor()
-
-
-def db_table_val(user_id: int, user_name: str, user_surname: str, username: str):  # Добавление данных в БД
-    cursor.execute('INSERT INTO users (user_id, user_name, user_surname, username) VALUES (?, ?, ?, ?)',
-                   (user_id, user_name, user_surname, username))
-    conn.commit()
-    # Подключение к БД
+# Подключение к базе данных
+mydb = mysql.connector.connect(
+    host="localhost",
+    user="root",
+    password="",
+    database="libshopdb"
+)
+# Создание курсора
+mycursor = mydb.cursor()
+# Первое состояние диалога
+SELECTING, SAVING = range(2)
 
 
 def is_admin(user_id):
@@ -46,61 +49,178 @@ def start_message(message):
         menu = types.KeyboardButton('Меню')
         keyboard.add(menu)
         name = message.from_user.first_name
-        bot.send_message(message.chat.id, f"Здравствуйте, {name}! Я бот, который может вам помочь.",
+        bot.send_message(message.chat.id, f"Здравствуйте, {name}! Я бот, который может вам помочь. "
+                                                                f"Для начала зарегистрируйтесь /register",
                          reply_markup=keyboard)
         print("Пользователь зашел")
 
-@bot.message_handler(commands=['add'])  # Команда добавления товаров
+
+@bot.message_handler(commands=['add'])  # Команда добавления заказов
 def handle_add_order(message):
+    print("Введите ID заказа")
     # запрашиваем id заказа
-    bot.send_message(message.chat.id, 'Введите id заказа')
-    # ждем ответа от пользователя и сохраняем его в словаре user_data
-    bot.register_next_step_handler(message, handle_order_id)
+    bot.send_message(message.chat.id, 'Введите ID заказа')
+    # ждем ответа от пользователя и сохраняем его в переменную order_id
+    bot.register_next_step_handler(message, lambda m: handle_order_id(m, message))
 
-def handle_order_id(message):
-    user_data['id'] = message.text
-    # запрашиваем название заказа
-    bot.send_message(message.chat.id, 'Введите название заказа')
-    # ждем ответа от пользователя и сохраняем его в словаре user_data
-    bot.register_next_step_handler(message, handle_order_name)
 
-def handle_order_name(message):
-    user_data['name'] = message.text
-    # запрашиваем номер заказа
-    bot.send_message(message.chat.id, 'Введите номер заказа')
-    # ждем ответа от пользователя и сохраняем его в словаре user_data
-    bot.register_next_step_handler(message, handle_order_tracking)
+def handle_order_id(message, prev_message):
+    order_id = message.text
+    # запрашиваем дату заказа
+    bot.send_message(prev_message.chat.id, 'Введите дату заказа в формате YYYY-MM-DD')
+    # ждем ответа от пользователя и сохраняем его в переменную date
+    bot.register_next_step_handler(message, lambda m: handle_order_date(m, prev_message, order_id))
 
-def handle_order_tracking(message):
-    user_data['tracking'] = message.text
-    # запрашиваем локацию заказа
-    bot.send_message(message.chat.id, 'Введите локацию заказа')
-    # ждем ответа от пользователя и сохраняем его в словаре user_data
-    bot.register_next_step_handler(message, handle_order_location)
 
-def handle_order_location(message):
-    user_data['location'] = message.text
+def handle_order_date(message, prev_message, order_id):
+    date = message.text
+    # запрашиваем id пользователя
+    bot.send_message(prev_message.chat.id, 'Введите ID пользователя')
+    # ждем ответа от пользователя и сохраняем его в переменную user_id
+    bot.register_next_step_handler(message, lambda m: handle_user_id(m, prev_message, order_id, date))
+
+
+def handle_user_id(message, prev_message, order_id, date):
+    user_id = message.text
+    # запрашиваем имя пользователя
+    bot.send_message(prev_message.chat.id, 'Введите имя пользователя')
+    # ждем ответа от пользователя и сохраняем его в переменную name
+    bot.register_next_step_handler(message, lambda m: handle_user_name(m, prev_message, order_id, date, user_id))
+
+
+def handle_user_name(message, prev_message, order_id, date, user_id):
+    name = message.text
+    # запрашиваем фамилию пользователя
+    bot.send_message(prev_message.chat.id, 'Введите фамилию пользователя')
+    # ждем ответа от пользователя и сохраняем его в переменную surname
+    bot.register_next_step_handler(message, lambda m: handle_user_surname(m, prev_message, order_id, date, user_id, name))
+
+
+def handle_user_surname(message, prev_message, order_id, date, user_id, name):
+    surname = message.text
+    # запрашиваем тип доставки
+    bot.send_message(prev_message.chat.id, 'Введите тип доставки')
+    # ждем ответа от пользователя и сохраняем его в переменную delivery_type
+    bot.register_next_step_handler(message,
+                                   lambda m: handle_delivery_type(m, prev_message, order_id, date, user_id, name,
+                                                                  surname))
+def handle_delivery_type(message, prev_message, order_id, date, user_id, name, surname):
+    delivery_type = message.text
+    # запрашиваем тип оплаты
+    bot.send_message(message.chat.id, 'Введите тип оплаты')
+    # ждем ответа от пользователя и сохраняем его в словаре user_data
+    bot.register_next_step_handler(message, handle_payment_type, prev_message, order_id, date, user_id, name, surname, delivery_type)
+
+def handle_payment_type(message, prev_message, order_id, date, user_id, name, surname, delivery_type):
+    payment_type = message.text
+    # запрашиваем сумму заказа
+    bot.send_message(message.chat.id, 'Введите сумму заказа')
+    # ждем ответа от пользователя и сохраняем его в словаре user_data
+    bot.register_next_step_handler(message, handle_order_amount, prev_message, order_id, date, user_id, name, surname, delivery_type, payment_type)
+
+def handle_order_amount(message, prev_message, order_id, date, user_id, name, surname, delivery_type, payment_type):
+    order_amount = message.text
     # добавляем заказ в таблицу orders
-    add_order(user_data['id'], user_data['name'], user_data['tracking'], user_data['location'])
+    add_order(order_id, date, user_id, name, surname, delivery_type, payment_type, order_amount)
     # сообщаем пользователю, что заказ успешно добавлен
     bot.send_message(message.chat.id, 'Заказ успешно добавлен')
 
-# функция для добавления заказа в таблицу orders
-def add_order(id, name, tracking, location):
-    # conn = sqlite3.connect('C:\\SqlLite\\Database')  # подключаемся к базе данных
-    # cursor = conn.cursor()  # создаем курсор для выполнения операций с базой данных
+
+def add_order(order_id, date, user_id, name, surname, delivery_type, payment_type, order_amount):
+    # Подключение к базе данных
+    mydb = mysql.connector.connect(
+        host="localhost",
+        user="root",
+        password="",
+        database="libshopdb"
+    )
+    mycursor = mydb.cursor()
     # используем команду INSERT для добавления новой строки в таблицу orders
-    cursor.execute('INSERT INTO orders (id, name, tracking, location) VALUES (?, ?, ?, ?)',
-                   (id, name, tracking, location))
-    pass
-    conn.commit()
-    print("Добавлено в БД")
+    sql = "INSERT INTO orders (OrderID, Date, UserID, Name, Surname, DeliveryTypeID, PaymentTypeID, OrderAmount) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)"
+    val = (order_id, date, user_id, name, surname, delivery_type, payment_type, order_amount)
+    mycursor.execute(sql, val)
+    mydb.commit()
+    print(mycursor.rowcount, "запись добавлена в таблицу orders")
+
+
+# обработчик команды "/orders"
+@bot.message_handler(commands=['orders'])
+def orders(message):
+    user_id = message.from_user.id
+
+    # запрос в базу данных на получение заказов пользователя
+    cursor = mydb.cursor()
+    cursor.execute("SELECT * FROM orders WHERE UserID = %s", (user_id,))
+    rows = cursor.fetchall()
+
+    # обрабатываем результат запроса
+    if len(rows) == 0:
+        bot.reply_to(message, "У вас нет заказов.")
+    else:
+        orders_list = "Ваши заказы:\n\n"
+        for row in rows:
+            order_id = row[0]
+            order_date = row[1]
+            order_name = row[2]
+            order_surname = row[3]
+            order_delivery = row[4]
+            order_payment = row[5]
+            order_amount = row[6]
+            order_info = f"Номер заказа: {order_id}\nДата заказа: {order_date}\nИмя: {order_name}\nФамилия: {order_surname}\nТип доставки: {order_delivery}\nТип оплаты: {order_payment}\nСумма заказа: {order_amount}\n\n"
+            orders_list += order_info
+        bot.reply_to(message, orders_list)
+    cursor.close()
 # А вот тут конец админки
 
 
-@bot.message_handler(content_types=['text'])  # При вводе определенного сообщения боту будет осуществлятся некая команда
+# функция обработки команды /register
+@bot.message_handler(commands=['register'])
+def register_user(message):
+    user_id = message.chat.id
+    user_data[user_id] = {}
+    bot.reply_to(message, "Введите свое имя:")
+    bot.register_next_step_handler(message, get_user_name)
+
+def get_user_name(message):
+    user_id = message.chat.id
+    user_data[user_id]['user_name'] = message.text
+    bot.reply_to(message, "Введите номер телефона:")
+    bot.register_next_step_handler(message, get_phone_number)
+
+def get_phone_number(message):
+    user_id = message.chat.id
+    user_data[user_id]['phone_number'] = message.text
+    bot.reply_to(message, "Введите пароль:")
+    bot.register_next_step_handler(message, get_user_password)
+
+
+def get_user_password(message):
+    user_id = message.chat.id
+    user_name = user_data[user_id]['user_name']
+    phone_number = user_data[user_id]['phone_number']
+    password = message.text
+    bot.reply_to(message, "Введите email:")
+    bot.register_next_step_handler(message, get_user_email, user_id, phone_number, password, user_name)
+
+
+def get_user_email(message, user_id, phone_number, password, user_name):
+    # получаем email пользователя
+    email = message.text
+    # добавляем пользователя в базу данных
+    try:
+        mycursor.execute(
+            "INSERT INTO users (UserID, PhoneNumber, Password, UserName, Email, RoleID) VALUES (%s, %s, %s, %s, %s, %s)",
+            (user_id, phone_number, password, user_name, email, 1))
+        mydb.commit()
+        bot.reply_to(message, "Вы успешно зарегистрированы!")
+    except mysql.connector.Error as err:
+        bot.reply_to(message, "Произошла ошибка при регистрации: {}".format(err))
+
+
+
+@bot.message_handler(content_types=['text'])
 def bot_message(message):
-    if message.chat.type == 'private':  # Проверка на то, что сообщение было отправлено в личном чате
+    if message.chat.type == 'private':
         if message.text == 'Меню':
             markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
             item1 = types.KeyboardButton('Перейти на сайт⏩')
@@ -109,38 +229,19 @@ def bot_message(message):
             markup.add(item1, item2, item3)
             bot.send_message(message.chat.id, 'Вот что я умею:', reply_markup=markup)
 
-        if message.text == 'Перейти на сайт⏩':
+        elif message.text == 'Перейти на сайт⏩':
             bot.send_message(message.chat.id, "По ссылке вы можете перейти на наш сайт📚" 'http://surl.li/ewhrr')
+
         elif message.text == 'Отслеживание заказа⏩':
             bot.send_message(message.chat.id, "Пожалуйста введите код отслеживания:")
             markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
             back = types.KeyboardButton('Назад⏪')
             markup.add(back)
+            bot.register_next_step_handler(message, handle_tracking_code, markup)
 
-            @bot.message_handler(content_types=['text'])
-            def handle_text(message):
-                if message.text == 'Назад⏪':
-                    # обработка кнопки "Назад"
-                    return
-                # обработка кода отслеживания
-                cursor = conn.cursor()
-                cursor.execute("SELECT * FROM orders WHERE tracking=?", (message.text,))
-                row = cursor.fetchone()
-                if row:
-                    order_info = f"ID: {row[0]}\nНазвание: {row[1]}\nНомер: {row[2]}\nСтатус: {row[3]}"
-                    bot.reply_to(message, order_info, reply_markup=markup)
-                    keyboard = types.InlineKeyboardMarkup()
-                    button = types.InlineKeyboardButton('Да', callback_data='button_pressed')
-                    keyboard.add(button)
-                    bot.send_message(message.chat.id, 'Отследить еще заказ?', reply_markup=keyboard)
-                else:
-                    print("Номер не найден")
-                    bot.send_message(message.chat.id, " Номер не найден", reply_markup=markup)
-            bot.register_next_step_handler(message, handle_text)
-
-        elif message.text == 'О Боте⏩':  # Бот информирует пользователя на что он способен
-            if message.text == 'О Боте⏩':
-                bot.send_message(message.chat.id, """Добро пожаловать в онлайн книжный магазин!📚 
+        elif message.text == 'О Боте⏩':
+            print("О Боте")
+            bot.send_message(message.chat.id, """Добро пожаловать в онлайн книжный магазин!📚 
 Я умею:
 
 Показывать каталог книг с подробными описаниями и изображениями;✅
@@ -154,62 +255,42 @@ def bot_message(message):
 Не стесняйтесь задавать мне вопросы, я всегда готов помочь!
 По всем вопросам: @dmitriyk97""")
 
-        # Кнопка возвращающая начальные кнопки
-        elif message.text == 'Назад⏪':
-            markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-            item1 = types.KeyboardButton('Перейти на сайт⏩')
-            item2 = types.KeyboardButton('Отслеживание заказа⏩')
-            item3 = types.KeyboardButton('О Боте⏩')
-            markup.add(item1, item2, item3)
-            bot.send_message(message.chat.id, 'Назад⏪', reply_markup=markup)
+def handle_tracking_code(message, markup):
+    if message.text == 'Назад⏪':
+        return
+    # проверяем, что сообщение содержит только цифры
+    if not message.text.isdigit():
+        bot.send_message(message.chat.id, 'Введите корректный номер заказа (только цифры)')
+        bot.register_next_step_handler(message, handle_tracking_code, markup=markup)
+        return
+    # получаем номер заказа из сообщения
+    order_id = int(message.text)
+    # выполняем запрос к базе данных для получения информации о заказе
+    mycursor.execute('SELECT * FROM orders WHERE OrderID = %s', (order_id,))
+    result = mycursor.fetchone()
+    # если заказ не найден, отправляем сообщение об ошибке
+    if result is None:
+        bot.send_message(message.chat.id, f'Заказ с номером {order_id} не найден')
+        return
+        # формируем сообщение с информацией о заказе
+    order_info = f"Номер заказа: {result[0]}\nДата заказа: {result[1]}\nID пользователя: {result[2]}\nИмя пользователя: {result[3]} {result[4]}\nТип доставки: {result[5]}\nТип оплаты: {result[6]}\nСумма заказа: {result[7]}"
+    # отправляем сообщение с информацией о заказе и кнопкой отслеживания
+    # добавляем Inline кнопку
+    markupInline = types.InlineKeyboardMarkup()
+    track_button = types.InlineKeyboardButton(text="Отслеживание заказа⏩", callback_data=f"track_{order_id}")
+    markupInline.add(track_button)
+    markup = get_yes_no_keyboard()
+    bot.send_message(message.chat.id, order_info, reply_markup=markup)
 
-    if message.text.lower() == 'меню':
-        user_id = message.from_user.id
-        user_name = message.from_user.first_name
-        user_surname = message.from_user.last_name
-        username = message.from_user.username
 
-        cursor.execute('SELECT COUNT(*) FROM users WHERE user_id = ?', (user_id,))
-        count = cursor.fetchone()[0]
-        if count > 0:
-            bot.send_message(message.chat.id, 'Вы уже зарегистрированы в базе данных!')
-            print("Пользователь попытался снова зарегистрироваться в бд")
-        else:
-            cursor.execute('INSERT INTO users (user_id, user_name, user_surname, username) VALUES (?, ?, ?, ?)',
-                           (user_id, user_name, user_surname, username))
-            conn.commit()
-            bot.send_message(message.chat.id, 'Вы были успешно зарегистрированы в базе данных!')
-            print("Пользователь зарегистрировался")
+def get_yes_no_keyboard():  # Нужно что бы после отправки соо можно было отправить еще или выйти в меню
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    yes_btn = types.KeyboardButton('Отслеживание заказа⏩')
+    no_btn = types.KeyboardButton('Меню')
+    markup.add(yes_btn, no_btn)
+    return markup
 
-
-@bot.callback_query_handler(func=lambda call: call.data == 'button_pressed')
-def handle_button_press(call):
-    # отправляем сообщение с запросом кода отслеживания
-    bot.send_message(call.message.chat.id, 'Пожалуйста, введите код отслеживания:')
-
-    @bot.message_handler(func=lambda message: True)
-    def handle_text(message):
-        if message.text == 'Назад⏪':
-            # обработка кнопки "Назад"
-            return
-        # обработка кода отслеживания
-        cursor.execute("SELECT * FROM orders WHERE tracking=?", (message.text,))
-        row = cursor.fetchone()
-        if row:
-            order_info = f"ID: {row[0]}\nНазвание: {row[1]}\nНомер: {row[2]}\nСтатус: {row[3]}"
-            bot.reply_to(message, order_info)
-            keyboard = types.InlineKeyboardMarkup()
-            button = types.InlineKeyboardButton('Отследить еще заказ', callback_data='button_pressed')
-            keyboard.add(button)
-            bot.send_message(message.chat.id, 'Отследить еще заказ?', reply_markup=keyboard)
-
-        else:
-            print("Номер не найден")
-            bot.send_message(message.chat.id, " Номер не найден")
-
-    bot.register_next_step_handler(call.message, handle_text)
-# cursor.close()
-# conn.close()
+    # UserID, PhoneNumber, Password, UserName, Email, RoleID
 print("Bot in work...")
 # запуск бота и непрерывная работа
 bot.polling(none_stop=True)
