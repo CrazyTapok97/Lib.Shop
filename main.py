@@ -1,3 +1,4 @@
+import re
 import mysql.connector
 # from mysql.connector import errorcode
 import telebot
@@ -6,9 +7,8 @@ bot = telebot.TeleBot('6116709046:AAGyX2UF_4fgLIVUQndbfrW4Ca2af-Xus7U')  # То�
 admin_list = [892133524, 493498734, 1017204373, 1247695547]  # Димас, Некит, Элис, Мадиярочка
 admins = {892133524: "Дмитрий", 493498734: "Никита", 1017204373: "Алиса", 1247695547: "Мадияр"}  # Знает имена админов
 
-# время задержки в секундах
-delay = 10
-
+    # список доменных зон, которые будем проверять
+allowed_domains = ["gmail.com", "mail.ru", "yahoo.com"]
 # словари
 last_click_time = {}
 last_message_time = {}
@@ -185,37 +185,76 @@ def get_user_name(message):
     user_id = message.chat.id
     user_data[user_id]['user_name'] = message.text
     bot.reply_to(message, "Введите номер телефона:")
-    bot.register_next_step_handler(message, get_phone_number)
+    bot.register_next_step_handler(message, get_phone_number_step2)
 
-def get_phone_number(message):
+
+
+def get_phone_number_step2(message):
     user_id = message.chat.id
-    user_data[user_id]['phone_number'] = message.text
-    bot.reply_to(message, "Введите пароль:")
-    bot.register_next_step_handler(message, get_user_password)
+    phone_number = message.text
+    if re.match(r'^\+?\d{1,12}$', phone_number):
+        user_data[user_id]['phone_number'] = phone_number
+        bot.reply_to(message, "Введите пароль:")
+        bot.register_next_step_handler(message, get_user_password)
+    else:
+        bot.reply_to(message, "Введите корректный номер телефона (только цифры и символ плюс, до 12 символов)")
+        bot.register_next_step_handler(message, get_phone_number_step2)
 
 
 def get_user_password(message):
     user_id = message.chat.id
-    user_name = user_data[user_id]['user_name']
-    phone_number = user_data[user_id]['phone_number']
-    password = message.text
-    bot.reply_to(message, "Введите email:")
-    bot.register_next_step_handler(message, get_user_email, user_id, phone_number, password, user_name)
+    user_data[user_id]['password'] = message.text
+    bot.reply_to(message, "Введите адрес электронной почты:")
+    bot.register_next_step_handler(message, get_user_email)
+def get_user_email(message):
+    user_id = message.chat.id
+    user_data[user_id]['email'] = message.text
+
+    # проверяем, что Email на английском языке
+    if not re.match(r'[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}', user_data[user_id]['email']):
+        bot.reply_to(message, "Введите корректный адрес электронной почты на английском языке, например, example@gmail.com")
+        bot.register_next_step_handler(message, get_user_email)
+        return
+
+    # проверяем, что Email содержит допустимый домен
+    valid_domains = ['gmail.com', 'mail.ru']
+    if not any(domain in user_data[user_id]['email'] for domain in valid_domains):
+        bot.reply_to(message, "Введите адрес электронной почты с допустимым доменом: @gmail.com или @mail.ru")
+        bot.register_next_step_handler(message, get_user_email)
+        return
+
+    # создаем inline клавиатуру с двумя кнопками "Да" и "Нет"
+    markup = types.InlineKeyboardMarkup()
+    yes_button = types.InlineKeyboardButton(text='Да', callback_data='yes')
+    no_button = types.InlineKeyboardButton(text='Нет', callback_data='no')
+    markup.row(yes_button, no_button)
+
+    # задаем вопрос "Все верно?" с помощью inline клавиатуры
+    bot.reply_to(message, "Все верно?", reply_markup=markup)
 
 
-def get_user_email(message, user_id, phone_number, password, user_name):
-    # получаем email пользователя
-    email = message.text
-    # добавляем пользователя в базу данных
-    try:
-        mycursor.execute(
-            "INSERT INTO users (UserID, PhoneNumber, Password, UserName, Email, RoleID) VALUES (%s, %s, %s, %s, %s, %s)",
-            (user_id, phone_number, password, user_name, email, 1))
-        mydb.commit()
-        bot.reply_to(message, "Вы успешно зарегистрированы!")
-    except mysql.connector.Error as err:
-        bot.reply_to(message, "Произошла ошибка при регистрации: {}".format(err))
-
+@bot.callback_query_handler(func=lambda call: True)
+def callback_handler(call):
+    user_id = call.message.chat.id
+    # если пользователь ответил "Да", то добавляем информацию в базу данных
+    if call.data == "yes":
+        user_name = user_data[user_id]['user_name']
+        phone_number = user_data[user_id]['phone_number']
+        password = user_data[user_id]['password']
+        email = user_data[user_id]['email']
+        try:
+            mycursor.execute(
+                "INSERT INTO users (UserID, PhoneNumber, Password, UserName, Email, RoleID) VALUES (%s, %s, %s, %s, %s, %s)",
+                (user_id, phone_number, password, user_name, email, 2))
+            mydb.commit()
+            bot.reply_to(call.message, "Вы успешно зарегистрированы!")
+        except mysql.connector.Error as err:
+            bot.reply_to(call.message, "Произошла ошибка при регистрации: Вы уже зарегистрированы")
+    # если пользователь ответил "Нет", то начинаем регистрацию заново
+    elif call.data == "no":
+        bot.reply_to(call.message, "Введите свое имя:")
+        user_data[user_id] = {}
+        bot.register_next_step_handler(call.message, get_user_name)
 
 
 @bot.message_handler(content_types=['text'])
@@ -256,13 +295,7 @@ def bot_message(message):
 По всем вопросам: @dmitriyk97""")
 
 def handle_tracking_code(message, markup):
-    if message.text == 'Назад⏪':
-        return
-    # проверяем, что сообщение содержит только цифры
-    if not message.text.isdigit():
-        bot.send_message(message.chat.id, 'Введите корректный номер заказа (только цифры)')
-        bot.register_next_step_handler(message, handle_tracking_code, markup=markup)
-        return
+
     # получаем номер заказа из сообщения
     order_id = int(message.text)
     # выполняем запрос к базе данных для получения информации о заказе
