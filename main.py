@@ -7,14 +7,12 @@ bot = telebot.TeleBot('6116709046:AAGyX2UF_4fgLIVUQndbfrW4Ca2af-Xus7U')  # То�
 admin_list = [892133524, 493498734, 1017204373, 1247695547]  # Димас, Некит, Элис, Мадиярочка
 admins = {892133524: "Дмитрий", 493498734: "Никита", 1017204373: "Алиса", 1247695547: "Мадияр"}  # Знает имена админов
 
-    # список доменных зон, которые будем проверять
-allowed_domains = ["gmail.com", "mail.ru", "yahoo.com"]
+
+allowed_domains = ["gmail.com", "mail.ru", "yahoo.com"]    # список доменных зон, которые будем проверять
 # словари
 last_click_time = {}
 last_message_time = {}
 user_data = {}
-
-# Подключение к БД
 
 
 # Подключение к базе данных
@@ -25,7 +23,7 @@ mydb = mysql.connector.connect(
     database="libshopdb"
 )
 # Создание курсора
-mycursor = mydb.cursor()
+mycursor = mydb.cursor()    # используется для выбора из базы данных некоторого подмножества хранимой в ней информации.
 # Первое состояние диалога
 SELECTING, SAVING = range(2)
 
@@ -104,6 +102,8 @@ def handle_user_surname(message, prev_message, order_id, date, user_id, name):
     bot.register_next_step_handler(message,
                                    lambda m: handle_delivery_type(m, prev_message, order_id, date, user_id, name,
                                                                   surname))
+
+
 def handle_delivery_type(message, prev_message, order_id, date, user_id, name, surname):
     delivery_type = message.text
     # запрашиваем тип оплаты
@@ -111,12 +111,14 @@ def handle_delivery_type(message, prev_message, order_id, date, user_id, name, s
     # ждем ответа от пользователя и сохраняем его в словаре user_data
     bot.register_next_step_handler(message, handle_payment_type, prev_message, order_id, date, user_id, name, surname, delivery_type)
 
+
 def handle_payment_type(message, prev_message, order_id, date, user_id, name, surname, delivery_type):
     payment_type = message.text
     # запрашиваем сумму заказа
     bot.send_message(message.chat.id, 'Введите сумму заказа')
     # ждем ответа от пользователя и сохраняем его в словаре user_data
     bot.register_next_step_handler(message, handle_order_amount, prev_message, order_id, date, user_id, name, surname, delivery_type, payment_type)
+
 
 def handle_order_amount(message, prev_message, order_id, date, user_id, name, surname, delivery_type, payment_type):
     order_amount = message.text
@@ -183,10 +185,17 @@ def register_user(message):
 
 def get_user_name(message):
     user_id = message.chat.id
-    user_data[user_id]['user_name'] = message.text
-    bot.reply_to(message, "Введите номер телефона:")
-    bot.register_next_step_handler(message, get_phone_number_step2)
-
+    user_name = message.text
+    if 3 <= len(user_name) <= 10:
+        user_data[user_id]['user_name'] = user_name
+        bot.reply_to(message, "Введите номер телефона:")
+        bot.register_next_step_handler(message, get_phone_number_step2)
+    elif len(user_name) < 3:
+        bot.reply_to(message, "Имя не может содержать менее 3 символов. Введите корректное имя:")
+        bot.register_next_step_handler(message, get_user_name)
+    else:
+        bot.reply_to(message, "Имя не может содержать более 10 символов. Введите корректное имя:")
+        bot.register_next_step_handler(message, get_user_name)
 
 
 def get_phone_number_step2(message):
@@ -206,6 +215,8 @@ def get_user_password(message):
     user_data[user_id]['password'] = message.text
     bot.reply_to(message, "Введите адрес электронной почты:")
     bot.register_next_step_handler(message, get_user_email)
+
+
 def get_user_email(message):
     user_id = message.chat.id
     user_data[user_id]['email'] = message.text
@@ -294,6 +305,7 @@ def bot_message(message):
 Не стесняйтесь задавать мне вопросы, я всегда готов помочь!
 По всем вопросам: @dmitriyk97""")
 
+
 def handle_tracking_code(message, markup):
 
     # получаем номер заказа из сообщения
@@ -316,14 +328,14 @@ def handle_tracking_code(message, markup):
     bot.send_message(message.chat.id, order_info, reply_markup=markup)
 
 
-def get_yes_no_keyboard():  # Нужно что бы после отправки соо можно было отправить еще или выйти в меню
+def get_yes_no_keyboard():  # Нужно, что бы после отправки соо можно было отправить еще или выйти в меню
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     yes_btn = types.KeyboardButton('Отслеживание заказа⏩')
     no_btn = types.KeyboardButton('Меню')
     markup.add(yes_btn, no_btn)
     return markup
 
-    # UserID, PhoneNumber, Password, UserName, Email, RoleID
+
 print("Bot in work...")
 # запуск бота и непрерывная работа
 bot.polling(none_stop=True)
