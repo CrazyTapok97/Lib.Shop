@@ -179,9 +179,13 @@ def orders(message):
 @bot.message_handler(commands=['register'])
 def register_user(message):
     user_id = message.chat.id
-    user_data[user_id] = {}
-    bot.reply_to(message, "Введите свое имя:")
-    bot.register_next_step_handler(message, get_user_name)
+    if user_id in user_data:
+        bot.reply_to(message, "Вы уже зарегистрированы!")
+    else:
+        user_data[user_id] = {}
+        bot.reply_to(message, "Введите свое имя:")
+        bot.register_next_step_handler(message, get_user_name)
+
 
 def get_user_name(message):
     user_id = message.chat.id
@@ -212,9 +216,18 @@ def get_phone_number_step2(message):
 
 def get_user_password(message):
     user_id = message.chat.id
-    user_data[user_id]['password'] = message.text
+    password = message.text
+
+    # проверяем, что пароль состоит минимум из 6 символов и обязательно содержит 3 цифры
+    if len(password) < 6 or len(re.findall('\d', password)) < 3:
+        bot.reply_to(message, "Пароль должен состоять минимум из 6 символов и обязательно содержать 3 цифры. Введите пароль еще раз:")
+        bot.register_next_step_handler(message, get_user_password)
+        return
+
+    user_data[user_id]['password'] = password
     bot.reply_to(message, "Введите адрес электронной почты:")
     bot.register_next_step_handler(message, get_user_email)
+
 
 
 def get_user_email(message):
