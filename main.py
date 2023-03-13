@@ -259,13 +259,17 @@ def callback_handler(call):
                 (user_id, phone_number, password, user_name, email, 2))
             mydb.commit()
             bot.reply_to(call.message, "Вы успешно зарегистрированы!")
+            bot.delete_message(call.message.chat.id, call.message.message_id)
         except mysql.connector.Error as err:
             bot.reply_to(call.message, "Произошла ошибка при регистрации: Вы уже зарегистрированы")
+            bot.delete_message(call.message.chat.id, call.message.message_id)
     # если пользователь ответил "Нет", то начинаем регистрацию заново
     elif call.data == "no":
         bot.reply_to(call.message, "Введите свое имя:")
         user_data[user_id] = {}
         bot.register_next_step_handler(call.message, get_user_name)
+        # удаляем сообщение
+        bot.delete_message(call.message.chat.id, call.message.message_id)
 
 
 @bot.message_handler(content_types=['text'])
